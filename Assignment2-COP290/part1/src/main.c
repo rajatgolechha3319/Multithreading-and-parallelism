@@ -9,9 +9,15 @@
 
 static ucontext_t ctx;
 
-static void conjecture(int len, void* options, int sz, void fn(void*)); // Create context and start traversal
-
-void assert(bool b); // Restore context if condition fails
+static void conjecture(int len, void* options, int sz, void fn(void*)){ // Create context and start traversal
+	options = options -sz;
+	getcontext(&ctx);
+	options = options + sz; len = len-1;
+	if(len >= 0) {fn(options);}
+}
+void assert(bool b){ // Restore context if condition fails
+	if(!b) {setcontext(&ctx);}
+}
 
 bool is_prime(int x) {
 	for(int i = 2; i <= x/2; i ++) {
@@ -39,7 +45,7 @@ void app(void* c) {
 }
 
 int main(void) {
-	int mynums[] = {11, 23, 42, 39, 55};
+	int mynums[] = {11, 100, 51, 55, 25};
 	// We have to ensure that conjecture lives in the bottom of the call stack. 
 	// If the conjecture frame is popped, we will never be able to rollback to it.
 	conjecture(5, (void*) mynums, sizeof(int), &app);
