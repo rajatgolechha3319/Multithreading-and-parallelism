@@ -1,52 +1,87 @@
-#define _XOPEN_SOURCE 600
 #include <stdio.h>
+#include "hm.h"
+#include "list.h"
 #include <stdlib.h>
-#include <ucontext.h>
-#define MEM 64000
-#include <stdio.h>
-#include <ucontext.h>
-#include <stdbool.h>
+#include <string.h>
+#include "mythread.h"
 
-static ucontext_t ctx;
+void readFile(void *);
 
-static void conjecture(int len, void* options, int sz, void fn(void*)){ // Create context and start traversal
-	options = options -sz;
-	getcontext(&ctx);
-	options = options + sz; len = len-1;
-	if(len >= 0) {fn(options);}
-}
-void assert(bool b){ // Restore context if condition fails
-	if(!b) {setcontext(&ctx);}
+struct hashmap_s hashmap;
+
+int printer(struct hashmap_element_s *const e) {
+    int* count = (int*) e->data;
+    printf("key %s, count %d\n", e->key, *count);
+    return 0;
 }
 
-bool is_prime(int x) {
-	for(int i = 2; i <= x/2; i ++) {
-		if(x % i == 0)
-			return false;
-	}
-	return true;
+int main(int argc, char** argv) {
+    hashmap_create(&hashmap);
+    printf("Testing threads!\n");
+    mythread_init();
+    for(int i=1;i<argc;i++) {
+        mythread_create(readFile, (void *) argv[i]);
+		// readFile(argv[i]);
+    }
+	printf("mythread will start soon");
+    mythread_join();
+	printf("output of hashmap \n");
+    hashmap_iterator(&hashmap, printer);
+    printf("Testing threads done!\n\n");
 }
 
-bool is_lt_40(int x) {
-	return x < 40;
+static void f2 (char* word) {
+    printf("Inside f2 %s\n", word);
+    acquire_bucket(&hashmap, word);
+	printf("ac done\n");
+    int* c = (int*) hashmap_get(&hashmap, word);
+    int* c1 = (int*) malloc(sizeof(int));
+    *c1 = 1;
+    if(c != NULL) {
+        for(int i = 0; i < *c; i ++) {
+            mythread_yield();
+       }
+        *c1 = *c + 1;
+    }
+    printf("Inside f2: c1 %d\n", *c1);
+    hashmap_put(&hashmap, word, c1);
+   release_bucket(&hashmap, word);
+    puts("finish f2");
 }
 
-int nested(int i) {
-	assert(!is_prime(i));
-	return i * i;
-}
+void readFile(void *args) {
+    	// Perform following steps
+    	// 1. Read a word from the file
+    	// 2. Acquire lock on relevent hashmap bucket
+    	// 3. Get count of word from hashmap. Let value returened by hashmap be x.
+    	// 4. Yield thread
+    	// 5. Set new count of the word as x+1.
+    	// 6. Release lock
+	    // 7. Repeat for all words in the file.
+		printf("entered readfile\n");
+		char *filename = (char*)args;
+	    FILE *fp = fopen(filename,"r");
+		printf("%s",filename);
+	    if(fp==NULL)
+	        return;
+	    char ch;
+	    int i=0;
+	    char arr[25];
+	    int val =-1;
+	    while((ch = fgetc(fp))!=EOF) {
 
-void app(void* c) {
-	int* i = (int*)c;
-	// printf("Trying %d\n", *i);
-	assert(is_lt_40(*i));
-	int x = nested(*i);
-	printf("%d\n", x);
-}
+	        if(ch!=' ' && ch!='\n' && ch!='\t' && ch!='\0') {
+	            arr[i] = ch;
+	            i++;
+	        } else {
+			
+	            arr[i] = 0;
+				
+	            f2(arr);
 
-int main(void) {
-	int mynums[] = {11, 100, 51, 55, 25};
-	// We have to ensure that conjecture lives in the bottom of the call stack. 
-	// If the conjecture frame is popped, we will never be able to rollback to it.
-	conjecture(5, (void*) mynums, sizeof(int), &app);
+	            for(int j=0;j<25;j++)
+	                arr[j]='\0';
+	            i=0;
+	        }
+	    }
 }
